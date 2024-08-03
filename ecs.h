@@ -80,19 +80,7 @@ static inline void del(struct ECS* ecs, ent_t ent, cmp_t type) {
     ecs->types[type][ent] = 0;
 }
 
-static inline int serialize(struct ECS* ecs, const char* filename) {
-    if (!ecs || !filename) return -1;
-
-    prefetch(ecs);
-    FILE* file = fopen(filename, "wb");
-    if (!file) return -1;
-
-    fwrite(ecs, sizeof(struct ECS), 1, file);
-    fclose(file);
-    return 0;
-}
-
-static inline int deserialize(struct ECS* ecs, const char* filename) {
+static inline int save(struct ECS* ecs, const char* filename) {
     if (!ecs || !filename) return -1;
 
     prefetch(ecs);
@@ -104,7 +92,19 @@ static inline int deserialize(struct ECS* ecs, const char* filename) {
     return 0;
 }
 
-static inline void ecs_iter(struct ECS* ecs, ecs_callback_t callback, void* context) {
+static inline int load(struct ECS* ecs, const char* filename) {
+    if (!ecs || !filename) return -1;
+
+    prefetch(ecs);
+    FILE* file = fopen(filename, "wb");
+    if (!file) return -1;
+
+    fwrite(ecs, sizeof(struct ECS), 1, file);
+    fclose(file);
+    return 0;
+}
+
+static inline void iterate(struct ECS* ecs, ecs_callback_t callback, void* context) {
     if (!ecs || !callback) return;
 
     for (size_t i = 0; i < ecs->ent_count; ++i) {
