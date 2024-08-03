@@ -23,7 +23,7 @@ struct ECS {
     size_t free_count;
 };
 
-static inline void ecs_init(struct ECS* ecs) {
+static inline void init(struct ECS* ecs) {
     ecs->ent_count = 0;
     ecs->free_count = 0;
     memset(ecs->ents, 0, sizeof(ecs->ents));
@@ -31,7 +31,7 @@ static inline void ecs_init(struct ECS* ecs) {
     memset(ecs->comps.data, 0, sizeof(ecs->comps.data));
 }
 
-static inline Ent ecs_create(struct ECS* ecs) {
+static inline Ent create(struct ECS* ecs) {
     Ent ent;
     if (ecs->free_count > 0) {
         ent = ecs->free_list[--ecs->free_count];
@@ -43,7 +43,7 @@ static inline Ent ecs_create(struct ECS* ecs) {
     return ent;
 }
 
-static inline void ecs_destroy(struct ECS* ecs, Ent ent) {
+static inline void destroy(struct ECS* ecs, Ent ent) {
     size_t i;
     for (i = 0; i < MAX_COMPS; ++i) {
         ecs->types[ent][i] = 0;
@@ -51,7 +51,7 @@ static inline void ecs_destroy(struct ECS* ecs, Ent ent) {
     ecs->free_list[ecs->free_count++] = ent;
 }
 
-static inline void ecs_add(struct ECS* ecs, Ent ent, CompType type, void* data, size_t size) {
+static inline void add(struct ECS* ecs, Ent ent, CompType type, void* data, size_t size) {
     size_t i;
     if (size > MAX_COMP_SIZE) return; // Component size too large
     for (i = 0; i < MAX_COMPS; ++i) {
@@ -63,7 +63,7 @@ static inline void ecs_add(struct ECS* ecs, Ent ent, CompType type, void* data, 
     }
 }
 
-static inline void ecs_remove(struct ECS* ecs, Ent ent, CompType type) {
+static inline void rem(struct ECS* ecs, Ent ent, CompType type) {
     size_t i;
     for (i = 0; i < MAX_COMPS; ++i) {
         if (ecs->types[ent][i] == type) {
@@ -73,7 +73,7 @@ static inline void ecs_remove(struct ECS* ecs, Ent ent, CompType type) {
     }
 }
 
-static inline void* ecs_get(struct ECS* ecs, Ent ent, CompType type) {
+static inline void* get(struct ECS* ecs, Ent ent, CompType type) {
     size_t i;
     for (i = 0; i < MAX_COMPS; ++i) {
         if (ecs->types[ent][i] == type) {
