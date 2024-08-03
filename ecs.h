@@ -1,85 +1,121 @@
+#ifndef ECS_H
+#define ECS_H
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdalign.h>
 
 #define MAX_ENTS 1024
-#define MAX_COMPS 32
-#define MAX_COMP_SIZE 64
+#define MAX_CMPS 32
+#define MAX_CMP_SIZE 64
+#define CACHE_LINE_SIZE 64
+#define PAGE_SIZE 4096
 
-typedef uint32_t Ent;
-typedef uint32_t CompType;
+typedef uint32_t ent_t;
+typedef uint32_t cmp_t;
 
-struct Comp {
-    uint8_t data[MAX_COMPS][MAX_ENTS][MAX_COMP_SIZE];
+typedef void (*ecs_callback_t)(ent_t, void*, void*);
+
+struct cmp_data {
+    alignas(CACHE_LINE_SIZE) uint8_t data[MAX_ENTS][MAX_CMP_SIZE];
 };
 
 struct ECS {
-    Ent ents[MAX_ENTS];
-    CompType types[MAX_ENTS][MAX_COMPS];
-    struct Comp comps;
-    size_t ent_count;
-    Ent free_list[MAX_ENTS];
-    size_t free_count;
+    alignas(PAGE_SIZE) size_t ent_count;
+    alignas(PAGE_SIZE) ent_t ents[MAX_ENTS];
+    
+    struct cmp_data cmps[MAX_CMPS];
+    alignas(CACHE_LINE_SIZE) cmp_t types[MAX_CMPS][MAX_ENTS];
+    
+    alignas(PAGE_SIZE) size_t free_count;
+    alignas(PAGE_SIZE) ent_t free_list[MAX_ENTS];
 };
 
-static inline void init(struct ECS* ecs) {
-    ecs->ent_count = 0;
-    ecs->free_count = 0;
-    memset(ecs->ents, 0, sizeof(ecs->ents));
-    memset(ecs->types, 0, sizeof(ecs->types));
-    memset(ecs->comps.data, 0, sizeof(ecs->comps.data));
+static inline void prefetch(const void* ptr) {
+    __builtin_prefetch(ptr, 0, 3);
 }
 
-static inline Ent create(struct ECS* ecs) {
-    Ent ent;
+static inline ent_t create(struct ECS* ecs) {
+    if (!ecs || ecs->ent_count >= MAX_ENTS) return (ent_t)-1;
+
     if (ecs->free_count > 0) {
-        ent = ecs->free_list[--ecs->free_count];
-    } else {
-        if (ecs->ent_count >= MAX_ENTS) return (Ent)-1; // No more entities
-        ent = ecs->ent_count++;
+        prefetch(&ecs->free_list[ecs->free_count - 1]);
+        return ecs->free_list[--ecs->free_count];
     }
-    ecs->ents[ent] = ent;
-    return ent;
+
+    ecs->ents[ecs->ent_count] = ecs->ent_count;
+    return ecs->ent_count++;
 }
 
-static inline void destroy(struct ECS* ecs, Ent ent) {
-    size_t i;
-    for (i = 0; i < MAX_COMPS; ++i) {
-        ecs->types[ent][i] = 0;
+static inline void destroy(struct ECS* ecs, ent_t ent) {
+    if (!ecs || ent >= ecs->ent_count) return;
+
+    for (size_t i = 0; i < MAX_CMPS; ++i) {
+        ecs->types[i][ent] = 0;
     }
+    prefetch(&ecs->free_list[ecs->free_count]);
     ecs->free_list[ecs->free_count++] = ent;
 }
 
-static inline void add(struct ECS* ecs, Ent ent, CompType type, void* data, size_t size) {
-    size_t i;
-    if (size > MAX_COMP_SIZE) return; // Component size too large
-    for (i = 0; i < MAX_COMPS; ++i) {
-        if (ecs->types[ent][i] == 0) {
-            ecs->types[ent][i] = type;
-            memcpy(ecs->comps.data[type][ent], data, size);
-            break;
+static inline int add(struct ECS* ecs, ent_t ent, cmp_t type, void* data, size_t size) {
+    if (!ecs || !data || ent >= ecs->ent_count || type >= MAX_CMPS || size > MAX_CMP_SIZE) return -1;
+
+    prefetch(ecs->cmps[type].data[ent]);
+    for (size_t i = 0; i < MAX_CMPS; ++i) {
+        if (ecs->types[type][ent] == 0) {
+            ecs->types[type][ent] = type;
+            memcpy(ecs->cmps[type].data[ent], data, size);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static inline void del(struct ECS* ecs, ent_t ent, cmp_t type) {
+    if (!ecs || ent >= ecs->ent_count || type >= MAX_CMPS) return;
+
+    prefetch(ecs->cmps[type].data[ent]);
+    ecs->types[type][ent] = 0;
+}
+
+static inline int serialize(struct ECS* ecs, const char* filename) {
+    if (!ecs || !filename) return -1;
+
+    prefetch(ecs);
+    FILE* file = fopen(filename, "wb");
+    if (!file) return -1;
+
+    fwrite(ecs, sizeof(struct ECS), 1, file);
+    fclose(file);
+    return 0;
+}
+
+static inline int deserialize(struct ECS* ecs, const char* filename) {
+    if (!ecs || !filename) return -1;
+
+    prefetch(ecs);
+    FILE* file = fopen(filename, "rb");
+    if (!file) return -1;
+
+    fread(ecs, sizeof(struct ECS), 1, file);
+    fclose(file);
+    return 0;
+}
+
+static inline void ecs_iter(struct ECS* ecs, ecs_callback_t callback, void* context) {
+    if (!ecs || !callback) return;
+
+    for (size_t i = 0; i < ecs->ent_count; ++i) {
+        for (size_t j = 0; j < MAX_CMPS; ++j) {
+            if (ecs->types[j][i] != 0) {
+                prefetch(ecs->cmps[j].data[i]);
+                callback(ecs->ents[i], ecs->cmps[j].data[i], context);
+            }
         }
     }
 }
 
-static inline void rem(struct ECS* ecs, Ent ent, CompType type) {
-    size_t i;
-    for (i = 0; i < MAX_COMPS; ++i) {
-        if (ecs->types[ent][i] == type) {
-            ecs->types[ent][i] = 0;
-            break;
-        }
-    }
-}
-
-static inline void* get(struct ECS* ecs, Ent ent, CompType type) {
-    size_t i;
-    for (i = 0; i < MAX_COMPS; ++i) {
-        if (ecs->types[ent][i] == type) {
-            return ecs->comps.data[type][ent];
-        }
-    }
-    return NULL;
-}
+#endif // ECS_H
 
