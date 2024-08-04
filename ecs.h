@@ -63,12 +63,10 @@ static inline int add(struct ECS* ecs, ent_t ent, cmp_t type, void* data, size_t
     if (!ecs || !data || ent >= ecs->ent_count || type >= MAX_CMPS || size > MAX_CMP_SIZE) return -1;
 
     prefetch(ecs->cmps[type].data[ent]);
-    for (size_t i = 0; i < MAX_CMPS; ++i) {
-        if (ecs->types[type][ent] == 0) {
-            ecs->types[type][ent] = type;
-            memcpy(ecs->cmps[type].data[ent], data, size);
-            return 0;
-        }
+    if (ecs->types[type][ent] == 0) {
+        ecs->types[type][ent] = type + 1; // Set the type (add 1 to differentiate from zero)
+        memcpy(ecs->cmps[type].data[ent], data, size);
+        return 0;
     }
     return -1;
 }
@@ -84,10 +82,10 @@ static inline int save(struct ECS* ecs, const char* filename) {
     if (!ecs || !filename) return -1;
 
     prefetch(ecs);
-    FILE* file = fopen(filename, "rb");
+    FILE* file = fopen(filename, "wb");
     if (!file) return -1;
 
-    fread(ecs, sizeof(struct ECS), 1, file);
+    fwrite(ecs, sizeof(struct ECS), 1, file);
     fclose(file);
     return 0;
 }
@@ -96,10 +94,10 @@ static inline int load(struct ECS* ecs, const char* filename) {
     if (!ecs || !filename) return -1;
 
     prefetch(ecs);
-    FILE* file = fopen(filename, "wb");
+    FILE* file = fopen(filename, "rb");
     if (!file) return -1;
 
-    fwrite(ecs, sizeof(struct ECS), 1, file);
+    fread(ecs, sizeof(struct ECS), 1, file);
     fclose(file);
     return 0;
 }
@@ -112,10 +110,10 @@ static inline void iterate(struct ECS* ecs, ecs_callback_t callback, void* conte
             if (ecs->types[j][i] != 0) {
                 prefetch(ecs->cmps[j].data[i]);
                 callback(ecs->ents[i], ecs->cmps[j].data[i], context);
+                break;
             }
         }
     }
 }
 
 #endif // ECS_H
-
