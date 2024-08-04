@@ -1,3 +1,5 @@
+// gcc -Ofast -funroll-loops -ffast-math -o test test.c;
+
 #include "ecs.h"
 #include <assert.h>
 #include <stdio.h>
@@ -7,7 +9,7 @@
 #define MAX_ENTS 1024
 #define MAX_CMPS 32
 #define MAX_CMP_SIZE 64
-#define SAVE_FILE "ecs_state.dat"
+#define SAVE_FILE "save.dat"
 
 void component_sum_callback(ent_t ent, void* data, void* context) {
     int* sum = (int*)context;
