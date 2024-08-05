@@ -14,11 +14,11 @@ DESCRIPTION
 
     It allows the following:
 
-    State saving and loading,
-    Entity creation and destruction,
-    Component addition and deletion,
-    and Itteration of state through
-    entity-embedded callback functions.
+        State saving and loading,
+        Entity creation and destruction,
+        Component addition and deletion,
+        and Itteration of state with
+        generic callback functions.
 
 SYNOPSIS
     #include "ecs.h"
