@@ -33,9 +33,13 @@ struct ECS {
     alignas(PAGE_SIZE) ent_t free_list[MAX_ENTS];
 };
 
+
+
+#ifndef prefetch
 static inline void prefetch(const void* ptr) {
     __builtin_prefetch(ptr, 0, 3);
 }
+#endif
 
 static inline ent_t create(struct ECS* ecs) {
     if (!ecs || ecs->ent_count >= MAX_ENTS) return (ent_t)-1;
