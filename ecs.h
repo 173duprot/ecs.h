@@ -34,9 +34,7 @@ struct ECS {
 };
 
 #ifndef prefetch
-static inline void prefetch(const void* ptr) {
-    __builtin_prefetch(ptr, 0, 3);
-}
+#define prefetch(ptr)   __builtin_prefetch(ptr, 0, 3);
 #endif
 
 static inline ent_t create(struct ECS* ecs) {
