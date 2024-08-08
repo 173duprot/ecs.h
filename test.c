@@ -1,7 +1,4 @@
-// gcc -Ofast -funroll-loops -ffast-math -o test test.c;
-
-#include "ecs.h"
-#include <assert.h>
+#include "new.h"
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -10,6 +7,7 @@
 #define MAX_CMPS 32
 #define MAX_CMP_SIZE 64
 #define SAVE_FILE "save.dat"
+#define NUM_ITERATIONS 10000
 
 void component_sum_callback(ent_t ent, void* data, void* context) {
     int* sum = (int*)context;
@@ -26,65 +24,73 @@ double get_time_in_seconds(struct timespec start, struct timespec end) {
 int main() {
     struct ECS ecs = {0};
     struct timespec start, end;
-    double duration;
+    double total_create_duration = 0;
+    double total_add_duration = 0;
+    double total_save_duration = 0;
+    double total_load_duration = 0;
+    double total_iterate_duration = 0;
+    double total_destroy_duration = 0;
 
-    // Test creating the maximum number of entities
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    for (size_t i = 0; i < MAX_ENTS; ++i) {
-        ent_t ent = create(&ecs);
-        assert(ent != (ent_t)-1);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to create %d entities: %f seconds\n", MAX_ENTS, duration);
+    for (size_t iter = 0; iter < NUM_ITERATIONS; ++iter) {
+        memset(&ecs, 0, sizeof(ecs));
 
-    // Test adding the maximum number of components to each entity
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    int data[MAX_CMP_SIZE / sizeof(int)];
-    for (size_t i = 0; i < MAX_CMP_SIZE / sizeof(int); ++i) {
-        data[i] = i;
-    }
-    for (size_t i = 0; i < MAX_ENTS; ++i) {
-        for (size_t j = 0; j < MAX_CMPS; ++j) {
-            assert(add(&ecs, i, j, data, sizeof(data)) == 0);
+        // Creating entities
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        for (size_t i = 0; i < MAX_ENTS; ++i) {
+            create(&ecs);
         }
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_create_duration += get_time_in_seconds(start, end);
+
+        // Adding components to entities
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        int data[MAX_CMP_SIZE / sizeof(int)];
+        for (size_t i = 0; i < MAX_CMP_SIZE / sizeof(int); ++i) {
+            data[i] = i;
+        }
+        for (size_t i = 0; i < MAX_ENTS; ++i) {
+            for (size_t j = 0; j < MAX_CMPS; ++j) {
+                add(&ecs, i, j, data, sizeof(data));
+            }
+        }
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_add_duration += get_time_in_seconds(start, end);
+
+        // Saving ECS state
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        save(&ecs, SAVE_FILE);
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_save_duration += get_time_in_seconds(start, end);
+
+        // Loading ECS state
+        struct ECS loaded_ecs = {0};
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        load(&loaded_ecs, SAVE_FILE);
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_load_duration += get_time_in_seconds(start, end);
+
+        // Iterating over entities
+        int sum = 0;
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        iterate(&loaded_ecs, component_sum_callback, &sum);
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_iterate_duration += get_time_in_seconds(start, end);
+
+        // Destroying entities
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        for (size_t i = 0; i < loaded_ecs.ent_count; ++i) {
+            destroy(&loaded_ecs, loaded_ecs.ents[i]);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_destroy_duration += get_time_in_seconds(start, end);
     }
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to add %d components to each of %d entities: %f seconds\n", MAX_CMPS, MAX_ENTS, duration);
 
-    // Test saving ECS state
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    assert(save(&ecs, SAVE_FILE) == 0);
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to save ECS state: %f seconds\n", duration);
-
-    // Test loading ECS state
-    struct ECS loaded_ecs = {0};
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    assert(load(&loaded_ecs, SAVE_FILE) == 0);
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to load ECS state: %f seconds\n", duration);
-
-    // Test iterating over all entities
-    int sum = 0;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    iterate(&loaded_ecs, component_sum_callback, &sum);
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to iterate over %d entities and sum components: %f seconds\n", MAX_ENTS, duration);
-    printf("Sum of component data: %d\n", sum);
-
-    // Test destroying all entities
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    for (size_t i = 0; i < MAX_ENTS; ++i) {
-        destroy(&ecs, i);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    duration = get_time_in_seconds(start, end);
-    printf("Time taken to destroy %d entities: %f seconds\n", MAX_ENTS, duration);
+    printf("Average time taken to create %d entities: %f seconds\n", MAX_ENTS, total_create_duration / NUM_ITERATIONS);
+    printf("Average time taken to add %d components to each of %d entities: %f seconds\n", MAX_CMPS, MAX_ENTS, total_add_duration / NUM_ITERATIONS);
+    printf("Average time taken to save ECS state: %f seconds\n", total_save_duration / NUM_ITERATIONS);
+    printf("Average time taken to load ECS state: %f seconds\n", total_load_duration / NUM_ITERATIONS);
+    printf("Average time taken to iterate over %d entities and sum components: %f seconds\n", MAX_ENTS, total_iterate_duration / NUM_ITERATIONS);
+    printf("Average time taken to destroy %d entities: %f seconds\n", MAX_ENTS, total_destroy_duration / NUM_ITERATIONS);
 
     return 0;
 }
