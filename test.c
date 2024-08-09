@@ -1,3 +1,5 @@
+// gcc -Ofast -funroll-loops -ffast-math -o test test.c;
+
 #include "ecs.h"
 #include <stdio.h>
 #include <time.h>

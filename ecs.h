@@ -52,10 +52,11 @@ static inline void destroy(struct ECS* ecs, ent_t ent) {
 }
 
 static inline int add(struct ECS* ecs, ent_t ent, cmp_t type, void* data, size_t size) {
-    if (!ecs || !data || ent >= ecs->ent_count || type >= MAX_CMPS || size > MAX_CMP_SIZE) return -1;
+    if (!ecs || !data || ent >= ecs->ent_count || type >= MAX_CMPS || type == 0 || size > MAX_CMP_SIZE) return -1;
+    // Type cannot be 0, 0 means empty
 
     if (ecs->cmps[type].types[ent] == 0) {
-        ecs->cmps[type].types[ent] = type + 1; // Set the type (add 1 to differentiate from zero)
+        ecs->cmps[type].types[ent] = type;
         memcpy(ecs->cmps[type].data[ent], data, size);
         return 0;
     }
